@@ -156,10 +156,12 @@ export interface ThreatFeed {
   enabled: boolean
 }
 
+export type UserRole = "admin" | "analyst" | "client"
+
 export interface UserAccount {
   id: string
   username: string
-  role: "admin" | "analyst"
+  role: UserRole
   createdAt: string
 }
 

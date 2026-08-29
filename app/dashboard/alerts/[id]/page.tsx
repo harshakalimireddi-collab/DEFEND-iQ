@@ -49,7 +49,12 @@ export default async function AlertDetailPage({
           Back to Alerts
         </Link>
       </div>
-      <AlertDetail alert={alert} pipelineSettings={pipelineSettings} currentUser={session?.user || "unknown"} />
+      <AlertDetail
+        alert={alert}
+        pipelineSettings={pipelineSettings}
+        currentUser={session?.user || "unknown"}
+        role={session?.role || "analyst"}
+      />
     </div>
   )
 }

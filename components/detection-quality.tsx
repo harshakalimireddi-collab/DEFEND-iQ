@@ -1,3 +1,5 @@
+import { Activity, CheckCircle2, ShieldCheck, Sparkles } from "lucide-react"
+
 interface DetectionQualityProps {
   report: {
     labeledCount: number
@@ -9,49 +11,87 @@ interface DetectionQualityProps {
 }
 
 export function DetectionQuality({ report }: DetectionQualityProps) {
+  const accuracy =
+    report.labeledCount > 0
+      ? Math.round((report.truePositiveCount / report.labeledCount) * 100)
+      : 100
+
   return (
-    <div className="glass rounded-lg p-4 flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <div>
-          <h3 className="text-sm font-medium text-foreground">Detection Quality</h3>
-          <p className="text-[11px] text-muted-foreground">
-            Labeled set: {report.labeledCount} ({report.truePositiveCount} TP / {report.falsePositiveCount} FP)
-          </p>
+    <div className="rounded-xl bg-[#080d1a]/90 backdrop-blur-xl border border-slate-800/80 p-5 flex flex-col gap-4 shadow-lg">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-800/70">
+        <div className="flex items-center gap-2">
+          <Activity className="w-4 h-4 text-blue-400" />
+          <div>
+            <h3 className="text-xs font-bold text-white uppercase tracking-wider font-mono">
+              AI Detection Quality & Tuning Index
+            </h3>
+            <p className="text-[11px] text-slate-400">
+              Evaluated against {report.labeledCount} ground-truth incidents ({report.truePositiveCount} True Positives / {report.falsePositiveCount} Suppressed FP)
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-[10px] font-mono px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold flex items-center gap-1.5">
+            <CheckCircle2 className="w-3 h-3" />
+            {accuracy}% AI Accuracy
+          </span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-background/40 rounded-md border border-border/20 p-3">
-          <p className="text-[11px] text-muted-foreground mb-2">Precision / Recall by Detector</p>
+        {/* Detectors Precision */}
+        <div className="bg-[#0a1020] rounded-lg border border-slate-800/70 p-3.5">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[11px] font-bold uppercase font-mono text-slate-300">
+              Detector Engine Performance
+            </span>
+            <span className="text-[10px] font-mono text-slate-500">P = Precision · R = Recall</span>
+          </div>
           <div className="space-y-2">
-            {report.detectors.map((d) => (
-              <div key={d.detector} className="text-[11px] flex items-center justify-between">
-                <span className="font-mono text-foreground/75">{d.detector}</span>
-                <span className="text-muted-foreground">
-                  P {d.precision}% · R {d.recall}% · TP {d.tp} / FP {d.fp}
-                </span>
-              </div>
-            ))}
+            {report.detectors.length === 0 ? (
+              <p className="text-xs text-slate-500 py-2">No detector metrics recorded</p>
+            ) : (
+              report.detectors.map((d) => (
+                <div key={d.detector} className="text-xs flex items-center justify-between py-1 border-b border-slate-800/40 last:border-0">
+                  <span className="font-mono text-slate-300 font-medium">{d.detector}</span>
+                  <div className="flex items-center gap-2 font-mono text-[11px]">
+                    <span className="text-blue-400 font-semibold">P: {d.precision}%</span>
+                    <span className="text-purple-400 font-semibold">R: {d.recall}%</span>
+                    <span className="text-slate-500">({d.tp}TP/{d.fp}FP)</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
-        <div className="bg-background/40 rounded-md border border-border/20 p-3">
-          <p className="text-[11px] text-muted-foreground mb-2">Precision / Recall by Source</p>
+        {/* Source Telemetry Performance */}
+        <div className="bg-[#0a1020] rounded-lg border border-slate-800/70 p-3.5">
+          <div className="flex items-center justify-between mb-2.5">
+            <span className="text-[11px] font-bold uppercase font-mono text-slate-300">
+              Telemetry Source Accuracy
+            </span>
+            <span className="text-[10px] font-mono text-slate-500">Sensor Confidence</span>
+          </div>
           <div className="space-y-2">
-            {report.bySource.map((s) => (
-              <div key={s.source} className="text-[11px] flex items-center justify-between">
-                <span className="font-mono text-foreground/75 truncate max-w-[180px]" title={s.source}>
-                  {s.source}
-                </span>
-                <span className="text-muted-foreground">
-                  P {s.precision}% · R {s.recall}% · TP {s.tp} / FP {s.fp}
-                </span>
-              </div>
-            ))}
+            {report.bySource.length === 0 ? (
+              <p className="text-xs text-slate-500 py-2">No sensor sources logged</p>
+            ) : (
+              report.bySource.map((s) => (
+                <div key={s.source} className="text-xs flex items-center justify-between py-1 border-b border-slate-800/40 last:border-0">
+                  <span className="font-mono text-slate-300 truncate max-w-[180px]" title={s.source}>
+                    {s.source}
+                  </span>
+                  <div className="flex items-center gap-2 font-mono text-[11px]">
+                    <span className="text-emerald-400 font-semibold">P: {s.precision}%</span>
+                    <span className="text-slate-500">({s.tp} TP)</span>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>
     </div>
   )
 }
-

@@ -17,14 +17,17 @@ import {
   ArrowDown,
   ChevronsUpDown,
   Columns3,
-  GripVertical,
-  Eye,
-  EyeOff,
   X,
   Loader2,
+  Upload,
+  ShieldAlert,
+  Sparkles,
 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Button } from "@/components/ui/button"
 import { useRouter } from "next/navigation"
+import { LogUploadDialog } from "@/components/log-upload-dialog"
+
 
 // ──────────────────────────────────────────────────────────────────
 // Types & Constants
@@ -370,11 +373,14 @@ function isEnrichmentPending(alert: Alert): boolean {
 // Main Component
 // ──────────────────────────────────────────────────────────────────
 
+import type { Alert, Severity, IncidentStatus, AlertVerdict, UserRole } from "@/lib/types"
+
 interface AlertsViewProps {
   initialAlerts: Alert[]
+  role?: UserRole
 }
 
-export function AlertsView({ initialAlerts }: AlertsViewProps) {
+export function AlertsView({ initialAlerts, role = "analyst" }: AlertsViewProps) {
   const router = useRouter()
   const [alerts, setAlerts] = useState<Alert[]>(initialAlerts)
   const [updatingRows, setUpdatingRows] = useState<Record<string, boolean>>({})
@@ -384,6 +390,7 @@ export function AlertsView({ initialAlerts }: AlertsViewProps) {
   const [sortKey, setSortKey] = useState<SortKey>("timestamp")
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc")
   const [columnsOpen, setColumnsOpen] = useState(false)
+  const [uploadOpen, setUploadOpen] = useState(false)
   const [columnOrder, setColumnOrder] = useState<ColumnKey[]>(ALL_COLUMNS.map((c) => c.key))
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(
     new Set(ALL_COLUMNS.filter((c) => c.defaultVisible).map((c) => c.key))
@@ -605,6 +612,18 @@ export function AlertsView({ initialAlerts }: AlertsViewProps) {
             />
           )}
         </div>
+
+        {/* Upload / Ingest Attack Button (Clients and Admins only) */}
+        {role !== "analyst" && (
+          <Button
+            size="sm"
+            onClick={() => setUploadOpen(true)}
+            className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-medium flex items-center gap-1.5 ml-auto shadow-sm"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            <span>Upload Attack</span>
+          </Button>
+        )}
       </div>
 
       {/* Table */}
@@ -702,20 +721,22 @@ export function AlertsView({ initialAlerts }: AlertsViewProps) {
                             ) : (
                               <>
                                 <VerdictBadge verdict={alert.verdict} />
-                                <select
-                                  value={alert.verdict}
-                                  disabled={!!updatingRows[alert.id]}
-                                  onClick={(e) => e.stopPropagation()}
-                                  onChange={(e) => {
-                                    e.stopPropagation()
-                                    handleInlineVerdictChange(alert.id, e.target.value as AlertVerdict)
-                                  }}
-                                  className="h-7 rounded-md border border-border/50 bg-background/60 px-2 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-60"
-                                >
-                                  <option value="malicious">Malicious</option>
-                                  <option value="suspicious">Suspicious</option>
-                                  <option value="false_positive">False Positive</option>
-                                </select>
+                                {role !== "client" && (
+                                  <select
+                                    value={alert.verdict}
+                                    disabled={!!updatingRows[alert.id]}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onChange={(e) => {
+                                      e.stopPropagation()
+                                      handleInlineVerdictChange(alert.id, e.target.value as AlertVerdict)
+                                    }}
+                                    className="h-7 rounded-md border border-slate-800 bg-[#0a1020] px-2 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/40 disabled:opacity-60 cursor-pointer"
+                                  >
+                                    <option value="malicious">Malicious</option>
+                                    <option value="suspicious">Suspicious</option>
+                                    <option value="false_positive">False Positive</option>
+                                  </select>
+                                )}
                               </>
                             )}
                           </div>
@@ -724,20 +745,22 @@ export function AlertsView({ initialAlerts }: AlertsViewProps) {
                         {key === "incident" && (
                           <div className="flex items-center gap-2">
                             <StatusBadge status={alert.incidentStatus} />
-                            <select
-                              value={alert.incidentStatus}
-                              disabled={!!updatingRows[alert.id]}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) => {
-                                e.stopPropagation()
-                                handleInlineIncidentChange(alert.id, e.target.value as IncidentStatus)
-                              }}
-                              className="h-7 rounded-md border border-border/50 bg-background/60 px-2 text-[11px] text-foreground focus:outline-none focus:ring-1 focus:ring-foreground/30 disabled:opacity-60"
-                            >
-                              <option value="unassigned">Unassigned</option>
-                              <option value="in_progress">In Progress</option>
-                              <option value="resolved">Resolved</option>
-                            </select>
+                            {role !== "client" && (
+                              <select
+                                value={alert.incidentStatus}
+                                disabled={!!updatingRows[alert.id]}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) => {
+                                  e.stopPropagation()
+                                  handleInlineIncidentChange(alert.id, e.target.value as IncidentStatus)
+                                }}
+                                className="h-7 rounded-md border border-slate-800 bg-[#0a1020] px-2 text-[11px] text-slate-200 focus:outline-none focus:ring-1 focus:ring-blue-500/40 disabled:opacity-60 cursor-pointer"
+                              >
+                                <option value="unassigned">Unassigned</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="resolved">Resolved</option>
+                              </select>
+                            )}
                           </div>
                         )}
 
@@ -786,17 +809,44 @@ export function AlertsView({ initialAlerts }: AlertsViewProps) {
                 <tr>
                   <td
                     colSpan={orderedVisible.length + 1}
-                    className="px-4 py-12 text-center"
+                    className="px-4 py-16 text-center"
                   >
-                    <p className="text-sm text-muted-foreground">No alerts match your filters</p>
-                    {searchQuery && (
-                      <button
-                        onClick={() => setSearchQuery("")}
-                        className="mt-2 text-xs text-muted-foreground/60 hover:text-muted-foreground underline"
-                      >
-                        Clear search
-                      </button>
-                    )}
+                    <div className="flex flex-col items-center justify-center gap-3 max-w-sm mx-auto">
+                      <div className="w-10 h-10 rounded-full bg-muted/30 border border-border/50 flex items-center justify-center text-muted-foreground">
+                        <ShieldAlert className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">No alerts match your filters</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {alerts.length === 0
+                            ? role === "analyst"
+                              ? "No security incidents or attack alerts found. Sensor telemetry streams are monitored in real-time."
+                              : "No cyber attacks or logs have been ingested yet. Upload a log or paste an attack to see instant AI threat intelligence."
+                            : "Try adjusting your search query or severity filters."}
+                        </p>
+                      </div>
+                      {alerts.length === 0 ? (
+                        role !== "analyst" && (
+                          <Button
+                            size="sm"
+                            onClick={() => setUploadOpen(true)}
+                            className="h-8 text-xs bg-primary text-primary-foreground hover:bg-primary/90 font-medium flex items-center gap-1.5 mt-1 shadow-sm"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            <span>Upload / Submit Cyber Attack</span>
+                          </Button>
+                        )
+                      ) : (
+                        searchQuery && (
+                          <button
+                            onClick={() => setSearchQuery("")}
+                            className="mt-1 text-xs text-muted-foreground/60 hover:text-muted-foreground underline"
+                          >
+                            Clear search
+                          </button>
+                        )
+                      )}
+                    </div>
                   </td>
                 </tr>
               )}
@@ -822,6 +872,9 @@ export function AlertsView({ initialAlerts }: AlertsViewProps) {
           </button>
         )}
       </div>
+
+      {/* Dedicated Upload Dialog */}
+      <LogUploadDialog open={uploadOpen} onOpenChange={setUploadOpen} />
     </div>
   )
 }

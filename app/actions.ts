@@ -10,7 +10,7 @@ import { deleteAlert as dbDeleteAlert, updateAlertIncidentStatus as dbUpdateAler
 import { addThreatFeed, removeThreatFeed, toggleThreatFeed, updateThreatFeedApiKey } from "@/lib/db/threat-feeds"
 import { toggleYaraRule } from "@/lib/db/yara-rules"
 import { createAlertNote, getAlertNotes } from "@/lib/db/alert-notes"
-import type { IncidentStatus, AlertVerdict } from "@/lib/types"
+import type { IncidentStatus, AlertVerdict, UserRole } from "@/lib/types"
 import { systemLog } from "@/lib/system-log"
 import path from "path"
 import fs from "fs"
@@ -18,6 +18,7 @@ import { execFile } from "child_process"
 import { promisify } from "util"
 import { getSigmaStatus } from "@/lib/sigma"
 import { consumeRateLimit, hashActor } from "@/lib/security/rate-limit"
+import { ingestLog } from "@/lib/pipeline"
 
 const execFileAsync = promisify(execFile)
 
@@ -27,15 +28,18 @@ async function requireSessionState() {
   return { ok: true as const, session }
 }
 
-function isAdminSession(session: { role?: "admin" | "analyst" } | null): boolean {
+function isAdminSession(session: { role?: UserRole } | null): boolean {
   return !!session && session.role === "admin"
 }
 
 // Auth actions
 
 export async function loginAction(_prevState: { error: string } | null, formData: FormData) {
-  const username = formData.get("username") as string
-  const password = formData.get("password") as string
+  const username = String(formData.get("username") || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+  const password = String(formData.get("password") || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
 
   if (!username || !password) {
     return { error: "Username and password are required" }
@@ -47,20 +51,59 @@ export async function loginAction(_prevState: { error: string } | null, formData
   const rl = consumeRateLimit({
     scope: "auth:login",
     actor,
-    limit: 10,
+    limit: 25, // Generous limit for testing & local development
     windowMs: 15 * 60_000,
   })
   if (!rl.allowed) {
-    return { error: "Too many login attempts. Try again later." }
+    return { error: "Too many login attempts. Try again in a few minutes." }
   }
 
   const success = await login(username, password)
 
   if (!success) {
-    return { error: "Invalid credentials" }
+    return { error: "Invalid credentials. Please check your username and password." }
   }
 
-  redirect("/dashboard")
+  const session = await getSession()
+  if (session?.role === "client") {
+    redirect("/dashboard/upload")
+  } else if (session?.role === "analyst") {
+    redirect("/dashboard/alerts")
+  } else {
+    redirect("/dashboard")
+  }
+}
+
+export async function registerClientAction(_prevState: { error: string } | null, formData: FormData) {
+  const username = (formData.get("username") as string || "").trim().toLowerCase()
+  const password = (formData.get("password") as string || "").trim()
+  const confirmPassword = (formData.get("confirmPassword") as string || "").trim()
+
+  if (!username || !password) {
+    return { error: "Username and password are required" }
+  }
+  if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+    return { error: "Username must be 3-32 characters (letters, numbers, ., _, -)" }
+  }
+  if (password.length < 6) {
+    return { error: "Password must be at least 6 characters" }
+  }
+  if (confirmPassword && password !== confirmPassword) {
+    return { error: "Passwords do not match" }
+  }
+
+  try {
+    await createUser(username, password, "client")
+    await login(username, password)
+  } catch (err) {
+    const msg = String(err)
+    if (/unique|constraint/i.test(msg)) {
+      return { error: "Username already taken. Please choose another." }
+    }
+    return { error: "Registration failed: " + msg }
+  }
+
+  redirect("/dashboard/upload")
 }
 
 export async function logoutAction() {
@@ -135,6 +178,30 @@ export async function createAnalystUserAction(
     const msg = String(err)
     if (/unique|constraint/i.test(msg)) return { success: false, error: "Username already exists" }
     return { success: false, error: msg }
+  }
+}
+
+export async function submitAttackAction(data: {
+  source: string
+  message: string
+  severity?: "critical" | "high" | "medium" | "low" | "info"
+}): Promise<{ success: boolean; alertId?: string; logId?: string; error?: string }> {
+  const session = await getSession()
+  if (!session) return { success: false, error: "Not authenticated" }
+  if (!data.message?.trim()) return { success: false, error: "Attack telemetry/message is required" }
+
+  try {
+    const result = await ingestLog({
+      source: data.source?.trim() || "Defense-Tactical-Sensor",
+      message: data.message.trim(),
+      severity: data.severity,
+      parsed: true,
+    })
+    revalidatePath("/dashboard")
+    revalidatePath("/dashboard/alerts")
+    return { success: true, logId: result.logId, alertId: result.alertId }
+  } catch (err) {
+    return { success: false, error: String(err) }
   }
 }
 
@@ -297,7 +364,11 @@ export async function syncSigmaRulesAction(): Promise<{ success: boolean; status
 export async function updateAlertIncidentStatusAction(
   alertId: string,
   incidentStatus: IncidentStatus
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession()
+  if (!session || session.role === "client") {
+    return { success: false, error: "Unauthorized: Clients have read-only access to alerts" }
+  }
   await dbUpdateAlertIncidentStatus(alertId, incidentStatus)
   revalidatePath("/dashboard/alerts")
   revalidatePath(`/dashboard/alerts/${alertId}`)
@@ -308,7 +379,11 @@ export async function updateAlertIncidentStatusAction(
 export async function updateAlertVerdictAction(
   alertId: string,
   verdict: AlertVerdict
-): Promise<{ success: boolean }> {
+): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession()
+  if (!session || session.role === "client") {
+    return { success: false, error: "Unauthorized: Clients have read-only access to alerts" }
+  }
   await dbUpdateAlertVerdict(alertId, verdict)
   revalidatePath("/dashboard/alerts")
   revalidatePath(`/dashboard/alerts/${alertId}`)
@@ -317,6 +392,10 @@ export async function updateAlertVerdictAction(
 }
 
 export async function deleteAlertAction(alertId: string): Promise<{ success: boolean; error?: string }> {
+  const session = await getSession()
+  if (!session || session.role === "client") {
+    return { success: false, error: "Unauthorized: Clients cannot delete alerts" }
+  }
   try {
     await dbDeleteAlert(alertId)
     revalidatePath("/dashboard/alerts")

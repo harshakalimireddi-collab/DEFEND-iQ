@@ -13,21 +13,52 @@ function stmtToObjects(db: Awaited<ReturnType<typeof getDb>>, sql: string, param
   return results
 }
 
+import type { UserRole } from "@/lib/types"
+
+function normalizeRole(r: unknown): UserRole {
+  const s = String(r || "").toLowerCase()
+  if (s === "admin") return "admin"
+  if (s === "client") return "client"
+  return "analyst"
+}
+
 export async function authenticateUser(
   username: string,
   password: string
-): Promise<{ id: string; username: string; role: "admin" | "analyst" } | null> {
-  const db = await getDb()
-  const rows = stmtToObjects(db, "SELECT id, username, role, password_hash FROM users WHERE username = ?", [username])
+): Promise<{ id: string; username: string; role: UserRole } | null> {
+  // Always get fresh DB instance so users added via manage-users.js or signup are immediately recognized
+  const db = await getDb(true)
+
+  const cleanUser = String(username || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .toLowerCase()
+
+  const rawPass = String(password || "").replace(/[\u200B-\u200D\uFEFF]/g, "")
+  const cleanPass = rawPass.trim().replace(/^['"]|['"]$/g, "") // strip quotes if pasted from terminal
+
+  const rows = stmtToObjects(
+    db,
+    "SELECT id, username, role, password_hash FROM users WHERE LOWER(username) = LOWER(?)",
+    [cleanUser]
+  )
   if (rows.length === 0) return null
 
   const user = rows[0]
-  if (!compareSync(password, user.password_hash as string)) return null
+  const storedHash = String(user.password_hash || "")
+
+  // Test sanitized, trimmed, and raw variations
+  const isMatch =
+    compareSync(cleanPass, storedHash) ||
+    compareSync(rawPass.trim(), storedHash) ||
+    compareSync(rawPass, storedHash)
+
+  if (!isMatch) return null
 
   return {
     id: user.id as string,
     username: user.username as string,
-    role: ((user.role as string) === "admin" ? "admin" : "analyst"),
+    role: normalizeRole(user.role),
   }
 }
 
@@ -41,35 +72,39 @@ export async function changePassword(
   if (rows.length === 0) return { success: false, error: "User not found" }
 
   const user = rows[0]
-  if (!compareSync(currentPassword, user.password_hash as string)) {
+  if (!compareSync(currentPassword.trim(), user.password_hash as string)) {
     return { success: false, error: "Current password is incorrect" }
   }
 
-  const hash = hashSync(newPassword, 10)
+  const hash = hashSync(newPassword.trim(), 10)
   db.run("UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?", [hash, user.id as string])
   persistDb()
   return { success: true }
 }
 
-export async function createUser(username: string, password: string, role: "admin" | "analyst" = "analyst"): Promise<string> {
+export async function createUser(username: string, password: string, role: UserRole = "analyst"): Promise<string> {
   const db = await getDb()
   const id = nanoid()
-  const hash = hashSync(password, 10)
-  db.run("INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)", [id, username, hash, role])
+  const cleanUser = username.trim().toLowerCase()
+  const cleanPass = password.trim()
+  const validRole = normalizeRole(role)
+
+  const hash = hashSync(cleanPass, 10)
+  db.run("INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)", [id, cleanUser, hash, validRole])
   persistDb()
   return id
 }
 
-export async function listUsers(): Promise<Array<{ id: string; username: string; role: "admin" | "analyst"; createdAt: string }>> {
+export async function listUsers(): Promise<Array<{ id: string; username: string; role: UserRole; createdAt: string }>> {
   const db = await getDb()
   const rows = stmtToObjects(
     db,
-    "SELECT id, username, role, created_at FROM users ORDER BY CASE WHEN role = 'admin' THEN 0 ELSE 1 END, username ASC"
+    "SELECT id, username, role, created_at FROM users ORDER BY CASE WHEN role = 'admin' THEN 0 WHEN role = 'analyst' THEN 1 ELSE 2 END, username ASC"
   )
   return rows.map((r) => ({
     id: r.id as string,
     username: r.username as string,
-    role: (r.role as string) === "admin" ? "admin" : "analyst",
+    role: normalizeRole(r.role),
     createdAt: (r.created_at as string) || "",
   }))
 }

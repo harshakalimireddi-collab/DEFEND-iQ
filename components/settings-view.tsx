@@ -1176,7 +1176,7 @@ export function SettingsView({ initialSettings, initialFeeds, initialYaraRules, 
             <div className="bg-background/40 rounded-md p-3 border border-border/20">
               <p className="text-[11px] text-muted-foreground mb-1">Endpoint</p>
               <code className="text-[11px] font-mono text-foreground/70">POST http://localhost:3000/api/v1/logs</code>
-              <br/>
+              <br />
               <code className="text-[11px] font-mono text-foreground/50">POST https://your-server:{apiPort}/api/v1/logs</code>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

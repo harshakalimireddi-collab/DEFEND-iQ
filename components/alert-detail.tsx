@@ -815,10 +815,12 @@ export function AlertDetail({
   alert,
   pipelineSettings,
   currentUser,
+  role = "analyst",
 }: {
   alert: Alert
   pipelineSettings?: PipelineSettings
   currentUser: string
+  role?: UserRole
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -973,51 +975,53 @@ export function AlertDetail({
               </p>
             </div>
 
-            {/* Controls row */}
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={alert.verdict}
-                onChange={(e) => handleVerdictChange(e.target.value as AlertVerdict)}
-                disabled={isPending}
-                className="h-8 rounded-md border border-border/50 bg-background/60 px-2 text-[11px] text-foreground"
-              >
-                <option value="malicious">Malicious</option>
-                <option value="suspicious">Suspicious</option>
-                <option value="false_positive">False Positive</option>
-              </select>
-              <select
-                value={alert.incidentStatus}
-                onChange={(e) => handleIncidentStatusChange(e.target.value as IncidentStatus)}
-                disabled={isPending}
-                className="h-8 rounded-md border border-border/50 bg-background/60 px-2 text-[11px] text-foreground"
-              >
-                <option value="unassigned">Unassigned</option>
-                <option value="in_progress">In Progress</option>
-                <option value="resolved">Resolved</option>
-              </select>
-              <button
-                onClick={handleRescan}
-                disabled={scanState !== "idle"}
-                className="h-8 rounded-md border border-border/50 px-2.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-60 flex items-center gap-1.5"
-              >
-                {scanState === "scanning" ? (
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                ) : scanState === "complete" ? (
-                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                ) : (
-                  <RefreshCw className="w-3 h-3" />
-                )}
-                Re-scan
-              </button>
-              <button
-                onClick={handleDeleteAlert}
-                disabled={deleting}
-                className="h-8 rounded-md border border-[hsl(var(--severity-critical))]/40 bg-[hsl(var(--severity-critical))]/10 px-2.5 text-[11px] text-[hsl(var(--severity-critical))] hover:bg-[hsl(var(--severity-critical))]/20 disabled:opacity-60 flex items-center gap-1.5"
-              >
-                {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
-                Delete
-              </button>
-            </div>
+            {/* Controls row (Analysts and Admins only) */}
+            {role !== "client" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={alert.verdict}
+                  onChange={(e) => handleVerdictChange(e.target.value as AlertVerdict)}
+                  disabled={isPending}
+                  className="h-8 rounded-md border border-border/50 bg-background/60 px-2 text-[11px] text-foreground cursor-pointer"
+                >
+                  <option value="malicious">Malicious</option>
+                  <option value="suspicious">Suspicious</option>
+                  <option value="false_positive">False Positive</option>
+                </select>
+                <select
+                  value={alert.incidentStatus}
+                  onChange={(e) => handleIncidentStatusChange(e.target.value as IncidentStatus)}
+                  disabled={isPending}
+                  className="h-8 rounded-md border border-border/50 bg-background/60 px-2 text-[11px] text-foreground cursor-pointer"
+                >
+                  <option value="unassigned">Unassigned</option>
+                  <option value="in_progress">In Progress</option>
+                  <option value="resolved">Resolved</option>
+                </select>
+                <button
+                  onClick={handleRescan}
+                  disabled={scanState !== "idle"}
+                  className="h-8 rounded-md border border-border/50 px-2.5 text-[11px] text-muted-foreground hover:text-foreground hover:border-foreground/30 transition-colors disabled:opacity-60 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {scanState === "scanning" ? (
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                  ) : scanState === "complete" ? (
+                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <RefreshCw className="w-3 h-3" />
+                  )}
+                  Re-scan
+                </button>
+                <button
+                  onClick={handleDeleteAlert}
+                  disabled={deleting}
+                  className="h-8 rounded-md border border-[hsl(var(--severity-critical))]/40 bg-[hsl(var(--severity-critical))]/10 px-2.5 text-[11px] text-[hsl(var(--severity-critical))] hover:bg-[hsl(var(--severity-critical))]/20 disabled:opacity-60 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {deleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                  Delete
+                </button>
+              </div>
+            )}
 
             {/* Timestamps */}
             <div className="flex flex-wrap items-center gap-4">

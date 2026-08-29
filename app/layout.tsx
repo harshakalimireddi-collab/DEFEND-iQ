@@ -9,11 +9,12 @@ const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 const jetbrainsMono = JetBrains_Mono({ subsets: ['latin'], variable: '--font-jetbrains' })
 
 export const metadata: Metadata = {
-  title: 'SOC Beacon',
-  description: 'AI-powered log enrichment and threat analysis platform',
+  title: 'Defend iQ | AI-Powered Security Operations Platform',
+  description: 'Smarter Defense. Stronger Future. Enterprise Security Operations Center and AI Threat Triage.',
   icons: {
-    icon: '/favicon.ico',
-    shortcut: '/favicon.ico',
+    icon: '/icon.svg',
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
   },
 }
 

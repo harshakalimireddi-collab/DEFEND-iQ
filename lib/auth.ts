@@ -3,12 +3,14 @@ import { redirect } from "next/navigation"
 import { authenticateUser } from "@/lib/db/users"
 import crypto from "crypto"
 
+import type { UserRole } from "@/lib/types"
+
 const SESSION_COOKIE = "soc-beacon-session"
 const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7 // 7 days
 
 type SessionPayload = {
   user: string
-  role: "admin" | "analyst"
+  role: UserRole
   ts: number
   exp: number
 }
@@ -48,7 +50,7 @@ function decodeSession(token: string): SessionPayload | null {
 
   try {
     const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as SessionPayload
-    if (!payload?.user || (payload.role !== "admin" && payload.role !== "analyst")) return null
+    if (!payload?.user || (payload.role !== "admin" && payload.role !== "analyst" && payload.role !== "client")) return null
     if (typeof payload.exp !== "number" || Date.now() > payload.exp) return null
     return payload
   } catch {
@@ -84,7 +86,7 @@ export async function logout() {
   cookieStore.delete(SESSION_COOKIE)
 }
 
-export async function getSession(): Promise<{ user: string; role?: "admin" | "analyst" } | null> {
+export async function getSession(): Promise<{ user: string; role?: UserRole } | null> {
   const cookieStore = await cookies()
   const session = cookieStore.get(SESSION_COOKIE)
   if (!session?.value) return null

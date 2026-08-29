@@ -58,7 +58,7 @@ async function loadDatabaseFromDiskOrCreate(): Promise<Database> {
   return nextDb
 }
 
-export async function getDb(): Promise<Database> {
+export async function getDb(forceReload: boolean = false): Promise<Database> {
   if (!db) {
     if (!initPromise) {
       initPromise = (async () => {
@@ -72,14 +72,16 @@ export async function getDb(): Promise<Database> {
   // In dev/app-router, different workers may write/read independently.
   // Reload from file when another worker has persisted a newer snapshot.
   const diskMtimeMs = getFileMtimeMs()
-  if (diskMtimeMs > dbFileMtimeMs) {
-    const previousDb = db
-    const SQL = await getSqlModule()
-    const reloaded = new SQL.Database(fs.readFileSync(DB_PATH))
-    applyPragmas(reloaded)
-    db = reloaded
-    dbFileMtimeMs = diskMtimeMs
-    ;(previousDb as unknown as { close?: () => void }).close?.()
+  if (forceReload || diskMtimeMs > dbFileMtimeMs) {
+    if (fs.existsSync(DB_PATH)) {
+      const previousDb = db
+      const SQL = await getSqlModule()
+      const reloaded = new SQL.Database(fs.readFileSync(DB_PATH))
+      applyPragmas(reloaded)
+      db = reloaded
+      dbFileMtimeMs = diskMtimeMs || getFileMtimeMs()
+      ;(previousDb as unknown as { close?: () => void }).close?.()
+    }
   }
 
   return db
