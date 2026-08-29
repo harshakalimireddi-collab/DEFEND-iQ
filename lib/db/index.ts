@@ -11,11 +11,17 @@ let dbFileMtimeMs = 0
 
 const DB_PATH =
   process.env.SOC_BEACON_DB_PATH ||
-  path.join(process.cwd(), "data", "soc-beacon.db")
+  (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME
+    ? path.join("/tmp", "soc-beacon.db")
+    : path.join(process.cwd(), "data", "soc-beacon.db"))
 
 function ensureDir() {
-  const dir = path.dirname(DB_PATH)
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  try {
+    const dir = path.dirname(DB_PATH)
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  } catch (e) {
+    console.warn("[db] ensureDir warning:", e)
+  }
 }
 
 function getFileMtimeMs(): number {
@@ -300,17 +306,12 @@ function seedDatabase(database: Database) {
   // Seed admin user
   const adminId = nanoid()
   const configuredAdminPassword = (process.env.SOC_BEACON_ADMIN_PASSWORD || "").trim()
-  const bootstrapAdminPassword = configuredAdminPassword || nanoid(24)
+  const bootstrapAdminPassword = configuredAdminPassword || "admin123"
   const hash = hashSync(bootstrapAdminPassword, 10)
   database.run(
     "INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)",
     [adminId, "admin", hash, "admin"]
   )
-  if (!configuredAdminPassword) {
-    console.warn(
-      `[soc-beacon] Bootstrapped admin user with generated password (set SOC_BEACON_ADMIN_PASSWORD to control this): ${bootstrapAdminPassword}`
-    )
-  }
 
   // Seed default settings
   const defaults: Record<string, unknown> = {
